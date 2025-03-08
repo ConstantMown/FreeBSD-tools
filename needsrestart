@@ -1,0 +1,55 @@
+#!/bin/sh
+
+if [ "$(id -u)" -ne "0" ] ; then
+	printf 'Got root?\n'
+	exit 1
+fi
+
+# Check if lsof is installed
+if ! command -v lsof >/dev/null 2>&1 ; then
+	printf 'Error: lsof not found. Please install it.\n'
+	exit 1
+fi
+
+#set -x
+set -u
+
+stale_inode_regex="$(lsof -nP +L1 2>/dev/null | awk '$5 == "VREG" {print $2}' | xargs | sed -e 's/ /|/g')"
+
+services_to_be_restarted=""
+
+printf 'Stale inode regex: "%s"\n' "$stale_inode_regex"
+
+if [ -n "$stale_inode_regex" ] ; then
+	for service in $(service -e | awk -F'/' '{print $NF}'); do
+		pid=$(service "$service" status 2>/dev/null | grep -E "${stale_inode_regex}" | awk '/is running as pid/ {print $NF}' | tr -d '.' | xargs)
+		if [ -n "$pid" ] ; then
+			if [ -n "$services_to_be_restarted" ] ; then
+				services_to_be_restarted="$services_to_be_restarted $service"
+			else
+				services_to_be_restarted="$service"
+			fi
+		fi
+		unset pid
+	done
+else
+	printf 'No service requires restart\n'
+	exit 0
+fi
+
+if [ -n "$services_to_be_restarted" ] ; then
+	echo "Services to be restarted: $services_to_be_restarted"
+	restart_regex=$(echo "$services_to_be_restarted" | sed -e 's/ /|/g')
+
+	for service_script in $(/sbin/rcorder /etc/rc.d/* /usr/local/etc/rc.d/* 2>/dev/null | grep -E "${restart_regex}"); do
+		service_name="$(basename "$service_script")"
+		echo "Restarting service: $service_name"
+		service "$service_name" restart
+		echo "Exit status: $?"
+	done
+else
+	printf 'No service requires restart\n'
+	exit 0
+fi
+
+exit 0
