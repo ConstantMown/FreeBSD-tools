@@ -14,13 +14,16 @@ fi
 #set -x
 set -u
 
-stale_inode_regex="$(lsof -nP +L1 2>/dev/null | awk '$5 == "VREG" {print $2}' | xargs | sed -e 's/ /|/g')"
+stale_inodes () { 
+	stale_inode_regex="$(lsof -nP +L1 2>/dev/null | awk '$5 == "VREG" {print $2}' | xargs | sed -e 's/ /|/g')"
+}
 
 services_to_be_restarted=""
+stale_inodes
 
 printf 'Stale inode regex: "%s"\n' "$stale_inode_regex"
 
-if [ -n "$stale_inode_regex" ] ; then
+if [ -n "$stale_inode_regex" ] && [ "$stale_inode_regex" != "|" ] ; then
 	for service in $(service -e | awk -F'/' '{print $NF}'); do
 		pid=$(service "$service" status 2>/dev/null | grep -E "${stale_inode_regex}" | awk '/is running as pid/ {print $NF}' | tr -d '.' | xargs)
 		if [ -n "$pid" ] ; then
@@ -43,13 +46,20 @@ if [ -n "$services_to_be_restarted" ] ; then
 
 	for service_script in $(/sbin/rcorder /etc/rc.d/* /usr/local/etc/rc.d/* 2>/dev/null | grep -E "${restart_regex}"); do
 		service_name="$(basename "$service_script")"
-		echo "Restarting service: $service_name"
+		printf 'Restarting service: %s\n' "$service_name"
 		service "$service_name" restart
-		echo "Exit status: $?"
+		printf 'Exit status: %d\n' "$?"
 	done
 else
 	printf 'No service requires restart\n'
 	exit 0
+fi
+
+stale_inodes
+
+if ps axuww | egrep -q "$stale_inode_regex" ; then
+	printf 'Running processes that are using removed files\n\n'
+	ps axuww | egrep "^USER|$stale_inode_regex"
 fi
 
 exit 0
