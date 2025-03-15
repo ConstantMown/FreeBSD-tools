@@ -14,7 +14,7 @@ fi
 #set -x
 set -u
 
-stale_inodes () { 
+stale_inodes() {
 	stale_inode_regex="$(lsof -nP +L1 2>/dev/null | awk '$5 == "VREG" {print $2}' | xargs | sed -e 's/ /|/g')"
 }
 
@@ -57,9 +57,9 @@ fi
 
 stale_inodes
 
-if ps axuww | egrep -q "$stale_inode_regex" ; then
+if ps axuww | grep -E -q "$stale_inode_regex" ; then
 	printf 'Running processes that are using removed files\n\n'
-	ps axuww | egrep "^USER|$stale_inode_regex"
+	ps axuww | grep -E "^USER|$stale_inode_regex"
 fi
 
 exit 0
