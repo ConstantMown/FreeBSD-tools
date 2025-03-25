@@ -57,9 +57,13 @@ fi
 
 stale_inodes
 
-if ps axuww | grep -E -q "$stale_inode_regex" ; then
-	printf 'Running processes that are using removed files\n\n'
-	ps axuww | grep -E "^USER|$stale_inode_regex"
+if [ -n "$stale_inode_regex" ] && [ "$stale_inode_regex" != "|" ] ; then
+	if ps axuww | grep -E -q "$stale_inode_regex" ; then
+		printf 'Running processes that are using removed files\n\n'
+		ps axuww | grep -E "^USER|$stale_inode_regex"
+	fi
+else
+	printf 'No processes using removed files\n'
 fi
 
 exit 0
