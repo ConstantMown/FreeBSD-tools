@@ -5,6 +5,44 @@
 
 set -u
 
+LOCKFILE="/var/run/$(basename "$0").lock"
+
+cleanup() {
+	rm -f "$LOCKFILE"
+}
+trap 'cleanup; exit 1' INT TERM HUP EXIT
+
+#
+# If exit value is zero, then there is something that one must wait before proceeeding.
+#
+my_wait() {
+	ps ax | grep -v grep | grep -q poudriere
+	exit $?
+}
+
+if [ -f "$LOCKFILE" ]; then
+	read oldpid < "$LOCKFILE"
+	if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then
+		# Another instance is running
+		exit 0
+	else
+		# Stale lock
+		rm -f "$LOCKFILE"
+	fi
+fi
+
+# Obtain lock (atomic)
+( set -o noclobber; echo "$$" > "$LOCKFILE" ) 2>/dev/null || exit 0
+
+if my_wait ; then
+	printf 'Waiting until cleared to continue\n'
+	while my_wait
+	do
+		printf '.'
+		sleep 60
+	done
+fi
+
 #
 # Download updates, if available
 #
@@ -15,6 +53,7 @@ set -u
 #	echo "$out1"
 #	printf 'Command "freebsd-update --not-running-from-cron fetch" return value was "%d"\n' "$rv"
 #else
+#	cleanup
 #	exit 0
 #fi
 
@@ -32,6 +71,7 @@ case $rv in
 	*)
 		install=idk
 		printf 'Unexpected return value from command "freebsd-update updatesready"\n'
+		cleanup
 		exit 1
 		;;
 esac
@@ -59,8 +99,12 @@ if [ "$install" = "yes" ] ; then
 		fi
 	fi
 fi
+
 if [ "$reboot" = "yes" ] ; then
+	cleanup
 	printf 'Rebooting "%s" at "%s"\n' "$(uname -n)" "$(date)"
 	shutdown -r now
 fi
+
+cleanup
 exit 0
