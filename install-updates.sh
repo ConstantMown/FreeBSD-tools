@@ -17,7 +17,7 @@ trap 'cleanup; exit 1' INT TERM HUP EXIT
 #
 my_wait() {
 	ps ax | grep -v grep | grep -q poudriere
-	exit $?
+	return $?
 }
 
 if [ -f "$LOCKFILE" ]; then
