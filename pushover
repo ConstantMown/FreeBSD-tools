@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -u
+
 # Set default values for Pushover tokens if not exported
 USER_TOKEN="${USER_TOKEN:-user_token}"
 APP_TOKEN="${APP_TOKEN:-app_token}"
@@ -79,7 +81,7 @@ MESSAGE="$1"
 TITLE=""
 
 if [ $# -lt 2 ]; then
-    TITLE="$(whoami)@${HOSTNAME}"
+    TITLE="$(whoami)@$(uname -n)"
 else
     TITLE="$2"
 fi
