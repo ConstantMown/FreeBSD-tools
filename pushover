@@ -1,0 +1,22 @@
+#!/bin/sh
+
+if [ $# -eq 0 ]; then
+        echo "Usage: ./pushover <message> [title]"
+        exit
+fi
+
+MESSAGE=$1
+
+if [ $# -lt 2 ]; then
+        TITLE="`whoami`@${HOSTNAME}"
+else
+        TITLE=$2
+fi
+
+USER_TOKEN="user_token"
+APP_TOKEN="app_token"
+
+if [ -x /usr/local/bin/wget ] ; then
+        wget https://api.pushover.net/1/messages.json --post-data="token=$APP_TOKEN&user=$USER_TOKEN&message=$MESSAGE&title=$TITLE" -qO- > /dev/null 2>&1 &
+fi
+
