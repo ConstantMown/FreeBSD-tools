@@ -1,22 +1,107 @@
 #!/bin/sh
 
-if [ $# -eq 0 ]; then
-        echo "Usage: ./pushover <message> [title]"
-        exit
+# Set default values for Pushover tokens if not exported
+USER_TOKEN="${USER_TOKEN:-user_token}"
+APP_TOKEN="${APP_TOKEN:-app_token}"
+
+# Define directories to search for curl or wget
+SEARCH_DIRS="/usr /opt /var"
+
+# Check if curl or wget is in $PATH
+if command -v curl > /dev/null 2>&1; then
+    CMD=$(command -v curl)
+    CMD_TYPE="curl"
+elif command -v wget > /dev/null 2>&1; then
+    CMD=$(command -v wget)
+    CMD_TYPE="wget"
+else
+    # Fallback: search for curl or wget in common directories
+    CMD_TYPE="none"
+    CMD=""
+
+    # Check for curl first
+    for dir in $SEARCH_DIRS; do
+        if [ -d "$dir" ]; then
+            # Find all files named 'curl' in this directory
+            find "$dir" -type f -name 'curl' | while read -r file; do
+                if [ -x "$file" ]; then
+                    # Verify it's a valid curl
+                    if "$file" --version > /dev/null 2>&1; then
+                        CMD="$file"
+                        CMD_TYPE="curl"
+                        break
+                    fi
+                fi
+            done
+            if [ "$CMD_TYPE" = "curl" ]; then
+                break
+            fi
+        fi
+    done
+
+    # If no curl found, check for wget
+    if [ "$CMD_TYPE" = "none" ]; then
+        for dir in $SEARCH_DIRS; do
+            if [ -d "$dir" ]; then
+                # Find all files named 'wget' in this directory
+                find "$dir" -type f -name 'wget' | while read -r file; do
+                    if [ -x "$file" ]; then
+                        # Verify it's a valid wget
+                        if "$file" --version > /dev/null 2>&1; then
+                            CMD="$file"
+                            CMD_TYPE="wget"
+                            break
+                        fi
+                    fi
+                done
+                if [ "$CMD_TYPE" = "wget" ]; then
+                    break
+                fi
+            fi
+        done
+    fi
+
+    # If neither curl nor wget is found
+    if [ "$CMD_TYPE" = "none" ]; then
+        echo "Error: Neither curl nor wget found in $PATH or common directories." >&2
+        exit 1
+    fi
 fi
 
-MESSAGE=$1
+# Check if at least one argument is provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <message> [title]"
+    exit 1
+fi
+
+# Extract message and title
+MESSAGE="$1"
+TITLE=""
 
 if [ $# -lt 2 ]; then
-        TITLE="`whoami`@${HOSTNAME}"
+    TITLE="$(whoami)@${HOSTNAME}"
 else
-        TITLE=$2
+    TITLE="$2"
 fi
 
-USER_TOKEN="user_token"
-APP_TOKEN="app_token"
-
-if [ -x /usr/local/bin/wget ] ; then
-        wget https://api.pushover.net/1/messages.json --post-data="token=$APP_TOKEN&user=$USER_TOKEN&message=$MESSAGE&title=$TITLE" -qO- > /dev/null 2>&1 &
+# Send notification using the found command
+if [ "$CMD_TYPE" = "curl" ]; then
+    "$CMD" --data-urlencode "token=$APP_TOKEN" \
+           --data-urlencode "user=$USER_TOKEN" \
+           --data-urlencode "message=$MESSAGE" \
+           --data-urlencode "title=$TITLE" \
+           https://api.pushover.net/1/messages.json > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Failed to send Pushover notification using curl." >&2
+        exit 1
+    fi
+else
+    "$CMD" --post-data="token=$APP_TOKEN&user=$USER_TOKEN&message=$MESSAGE&title=$TITLE" \
+           -qO- https://api.pushover.net/1/messages.json > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Failed to send Pushover notification using wget." >&2
+        exit 1
+    fi
 fi
 
+exit 0
